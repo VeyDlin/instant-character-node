@@ -1,6 +1,5 @@
 from safetensors.torch import load_file
 import torch
-from tqdm import tqdm
 
 __all__ = [
     'flux_load_lora'
@@ -26,7 +25,7 @@ def flux_load_lora(self, lora_file, lora_weight=1.0):
     keys = list(state_dict.keys())
     keys = [k for k in keys if k.startswith('transformer.')]
 
-    for k_lora in tqdm(keys, total=len(keys), desc=f"loading lora in transformer ..."):
+    for k_lora in keys:
         v_lora = state_dict[k_lora]
 
         # 非 up 的都跳过
@@ -84,7 +83,7 @@ def flux_load_lora(self, lora_file, lora_weight=1.0):
     keys = list(state_dict.keys())
     keys = [k for k in keys if k.startswith('lora_te1_')]
 
-    for k_lora in tqdm(keys, total=len(keys), desc=f"loading lora in text_encoder ..."):
+    for k_lora in keys:
         v_lora = state_dict[k_lora]
 
         # 非 up 的都跳过
