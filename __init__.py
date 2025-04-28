@@ -1,0 +1,1 @@
+from .instant_character import InstantCharacterIvocation
