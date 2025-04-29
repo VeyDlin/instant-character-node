@@ -67,9 +67,9 @@ class InstantCharacterIvocation(BaseInvocation):
         
         pipe.init_adapter(
             image_encoder_path=self.image_encoder,
-            #cache_dir=image_encoder_cache_dir,
+            cache_dir=os.path.abspath(context.config.get().download_cache_dir),
             image_encoder_2_path=self.image_encoder_2,
-            #cache_dir_2=image_encoder_2_cache_dir,
+            cache_dir_2=os.path.abspath(context.config.get().download_cache_dir),
             subject_ipadapter_cfg=dict(
                 subject_ip_adapter_path=self.ip_adapter,
                 nb_token=1024
