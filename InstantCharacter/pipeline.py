@@ -545,7 +545,7 @@ class InstantCharacterFluxPipeline(FluxPipeline):
 
     def with_style_lora(self, lora_file_path, lora_weight=1.0, prompt_with_lora_trigger='', *args, **kwargs):
         flux_load_lora(self, lora_file_path, lora_weight)
-        kwargs['prompt'] = prompt_with_lora_trigger
+        kwargs['prompt'] = kwargs['prompt'] if prompt_with_lora_trigger == "" else prompt_with_lora_trigger
         res = self.__call__(*args, **kwargs)
         flux_load_lora(self, lora_file_path, -lora_weight)
         return res

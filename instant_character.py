@@ -1,6 +1,8 @@
+import os
 import torch
 from .InstantCharacter.pipeline import InstantCharacterFluxPipeline
 
+from typing import Optional
 from invokeai.invocation_api import (
     BaseInvocation,
     InputField,
@@ -13,6 +15,9 @@ from invokeai.invocation_api import (
     ModelIdentifierField,
     ImageOutput
 )
+
+from invokeai.app.invocations.model import ModelIdentifierField, LoRAField
+
 
 @invocation(
     "instant_character",
@@ -31,11 +36,10 @@ class InstantCharacterIvocation(BaseInvocation):
     ip_adapter: str = InputField(default="Tencent/InstantCharacter")
     image_encoder: str = InputField(default="google/siglip-so400m-patch14-384")
     image_encoder_2: str = InputField(default="facebook/dinov2-giant")
-    cpu_offload: float = InputField(default=False)
-    lora: ModelIdentifierField | None  = InputField(
-        description=FieldDescriptions.lora_model, title="LoRA", ui_type=UIType.LoRAModel
+    cpu_offload: bool = InputField(default=False)
+    lora: Optional[LoRAField]  = InputField(
+        default=None, description=FieldDescriptions.lora_model, title="LoRA"
     )
-    lora_weight: float = InputField(default=0.75, description=FieldDescriptions.lora_weight)
     subject_image: ImageField = InputField()
     prompt: str = InputField()
     prompt_with_lora_trigger: str = InputField()
@@ -48,9 +52,11 @@ class InstantCharacterIvocation(BaseInvocation):
 
     def invoke(self, context: InvocationContext) -> ImageOutput:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-   
+
+        model_config = context.models.get_config(self.model)
+        model_path = os.path.abspath(os.path.join(context.config.get().models_dir, model_config.path))
         pipe = InstantCharacterFluxPipeline.from_pretrained(
-            self.model.name, 
+            model_path, 
             torch_dtype=torch.bfloat16
         )
         
@@ -85,9 +91,11 @@ class InstantCharacterIvocation(BaseInvocation):
                 subject_scale=self.subject_scale,
             )
         else:
+            lora_config = context.models.get_config(self.lora.lora)
+            lora_path = os.path.abspath(os.path.join(context.config.get().models_dir, lora_config.path))
             output = pipe.with_style_lora(
-                lora_file_path=self.lora.name,
-                lora_weight=self.lora_weight,
+                lora_file_path=lora_path,
+                lora_weight=self.lora.weight,
                 prompt_with_lora_trigger=self.prompt_with_lora_trigger,
 
                 prompt=self.prompt,
