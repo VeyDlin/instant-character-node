@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import torch
 from .InstantCharacter.pipeline import InstantCharacterFluxPipeline
 
@@ -54,10 +54,9 @@ class InstantCharacterIvocation(BaseInvocation):
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
         model_config = context.models.get_config(self.model)
-        model_path = os.path.abspath(os.path.join(context.config.get().models_dir, model_config.path))
+        model_path = (Path(context.config.get().models_dir) / model_config.path).resolve()
         pipe = InstantCharacterFluxPipeline.from_pretrained(
-            model_path, 
-            torch_dtype=torch.bfloat16
+            pretrained_model_name_or_path=model_path
         )
         
         if self.cpu_offload:
@@ -67,9 +66,9 @@ class InstantCharacterIvocation(BaseInvocation):
         
         pipe.init_adapter(
             image_encoder_path=self.image_encoder,
-            cache_dir=os.path.abspath(context.config.get().download_cache_dir),
+            cache_dir=Path(context.config.get().download_cache_dir).resolve(),
             image_encoder_2_path=self.image_encoder_2,
-            cache_dir_2=os.path.abspath(context.config.get().download_cache_dir),
+            cache_dir_2=Path(context.config.get().download_cache_dir).resolve(),
             subject_ipadapter_cfg=dict(
                 subject_ip_adapter_path=self.ip_adapter,
                 nb_token=1024
@@ -92,7 +91,7 @@ class InstantCharacterIvocation(BaseInvocation):
             )
         else:
             lora_config = context.models.get_config(self.lora.lora)
-            lora_path = os.path.abspath(os.path.join(context.config.get().models_dir, lora_config.path))
+            lora_path = (Path(context.config.get().models_dir) / lora_config.path).resolve()
             output = pipe.with_style_lora(
                 lora_file_path=lora_path,
                 lora_weight=self.lora.weight,
