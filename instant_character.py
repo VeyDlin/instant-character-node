@@ -4,6 +4,7 @@ import torch
 from contextlib import ExitStack
 from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
 from diffusers.models import AutoencoderKL, FluxTransformer2DModel
+from diffusers import FlowMatchEulerDiscreteScheduler
 
 from .InstantCharacter.pipeline import InstantCharacterFluxPipeline
 
@@ -134,7 +135,13 @@ class InstantCharacterIvocation(BaseInvocation):
                 text_encoder_2=t5_text_encoder,
                 tokenizer_2=t5_tokenizer,
                 vae=vae,
-                #scheduler= ???
+                scheduler=FlowMatchEulerDiscreteScheduler(
+                    num_train_timesteps=1000,
+                    beta_start=0.00085,
+                    beta_end=0.012,
+                    beta_schedule="scaled_linear",
+                    prediction_type="epsilon"
+                )
             )
 
             if self.cpu_offload:
