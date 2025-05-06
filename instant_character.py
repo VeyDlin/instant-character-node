@@ -2,9 +2,8 @@ from typing import Optional
 from pathlib import Path
 import torch
 from contextlib import ExitStack
-from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5Tokenizer, T5TokenizerFast
-from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
-from diffusers.models.autoencoders.autoencoder_tiny import AutoencoderTiny
+from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
+from diffusers.models import AutoencoderKL, FluxTransformer2DModel
 
 from .InstantCharacter.pipeline import InstantCharacterFluxPipeline
 
@@ -110,13 +109,13 @@ class InstantCharacterIvocation(BaseInvocation):
             assert isinstance(clip_text_encoder, CLIPTextModel)
             assert isinstance(clip_tokenizer, CLIPTokenizer)
             assert isinstance(t5_text_encoder, T5EncoderModel)
-            assert isinstance(t5_tokenizer, (T5Tokenizer, T5TokenizerFast))
-            assert isinstance(vae, (AutoencoderKL, AutoencoderTiny))
+            assert isinstance(t5_tokenizer, T5TokenizerFast)
+            assert isinstance(vae, AutoencoderKL)
 
             (cached_weights, transformer) = exit_stack.enter_context(
                 context.models.load(load_transformer).model_on_device()
             )
-            assert isinstance(transformer, Flux)
+            assert isinstance(transformer, Flux) # TODO: FluxTransformer2DModel
             if transformer_config.format in [ModelFormat.Checkpoint]:
                 model_is_quantized = False
             elif transformer_config.format in [
