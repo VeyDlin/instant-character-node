@@ -1,10 +1,13 @@
+from typing import Optional
 from pathlib import Path
 import torch
 from contextlib import ExitStack
 from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5Tokenizer, T5TokenizerFast
+from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
+from diffusers.models.autoencoders.autoencoder_tiny import AutoencoderTiny
+
 from .InstantCharacter.pipeline import InstantCharacterFluxPipeline
 
-from typing import Optional
 from invokeai.invocation_api import (
     BaseInvocation,
     InputField,
@@ -49,6 +52,9 @@ class InstantCharacterIvocation(BaseInvocation):
         input=Input.Direct,
         title="CLIP Embed",
     )
+    vae_model: ModelIdentifierField = InputField(
+        description=FieldDescriptions.vae_model, ui_type=UIType.FluxVAEModel, title="VAE"
+    )
     ip_adapter: str = InputField(default="Tencent/InstantCharacter")
     image_encoder: str = InputField(default="google/siglip-so400m-patch14-384")
     image_encoder_2: str = InputField(default="facebook/dinov2-giant")
@@ -70,33 +76,42 @@ class InstantCharacterIvocation(BaseInvocation):
         device = "cuda" if torch.cuda.is_available() else "cpu"
         inference_dtype = torch.bfloat16
 
+        # CLIP
         load_clip_tokenizer = self.clip_embed_model.model_copy(update={"submodel_type": SubModelType.Tokenizer})
         load_clip_text_encoder = self.clip_embed_model.model_copy(update={"submodel_type": SubModelType.TextEncoder})
         clip_text_encoder_info = context.models.load(load_clip_text_encoder)
         clip_text_encoder_config = clip_text_encoder_info.config
         assert clip_text_encoder_config is not None
 
+        # T5 encoder
         load_t5_encoder_tokenizer = preprocess_t5_tokenizer_model_identifier(self.t5_encoder_model)
         load_t5_encoder_text_encoder = preprocess_t5_encoder_model_identifier(self.t5_encoder_model)
         t5_encoder_info = context.models.load(load_t5_encoder_text_encoder)
         t5_encoder_config = t5_encoder_info.config
         assert t5_encoder_config is not None
 
+        # Transformer
         load_transformer = self.model.model_copy(update={"submodel_type": SubModelType.Transformer})
         transformer_config = context.models.get_config(load_transformer)
         assert transformer_config is not None
         
+        # VAE
+        load_vae = self.vae_model.model_copy(update={"submodel_type": SubModelType.VAE})
+        vae_info = context.models.load(load_vae)
+
         with (
             clip_text_encoder_info.model_on_device() as (cached_weights, clip_text_encoder),
             context.models.load(load_clip_tokenizer) as clip_tokenizer,
             t5_encoder_info.model_on_device() as (cached_weights, t5_text_encoder),
             context.models.load(load_t5_encoder_tokenizer) as t5_tokenizer,
+            vae_info.model_on_device() as (_, vae),
             ExitStack() as exit_stack,
         ):
             assert isinstance(clip_text_encoder, CLIPTextModel)
             assert isinstance(clip_tokenizer, CLIPTokenizer)
             assert isinstance(t5_text_encoder, T5EncoderModel)
             assert isinstance(t5_tokenizer, (T5Tokenizer, T5TokenizerFast))
+            assert isinstance(vae, (AutoencoderKL, AutoencoderTiny))
 
             (cached_weights, transformer) = exit_stack.enter_context(
                 context.models.load(load_transformer).model_on_device()
@@ -119,13 +134,14 @@ class InstantCharacterIvocation(BaseInvocation):
                 tokenizer=clip_tokenizer,
                 text_encoder_2=t5_text_encoder,
                 tokenizer_2=t5_tokenizer,
-                torch_dtype=inference_dtype,
+                vae=vae,
+                #scheduler= ???
             )
-            
+
             if self.cpu_offload:
                 pipe.enable_sequential_cpu_offload()
             else:
-                pipe.to(device)
+                pipe.to(device=device, dtype=inference_dtype)
             
             pipe.init_adapter(
                 image_encoder_path=self.image_encoder,
