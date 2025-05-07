@@ -1,4 +1,6 @@
 # Instant Character
+> [!WARNING]
+> This node is still under development and not yet functional
 
 This node integrates [InstantCharacter](https://github.com/Tencent/InstantCharacter) — a character-consistent image generator by Tencent Hunyuan — into the [InvokeAI](https://github.com/invoke-ai/InvokeAI) workflow.
 
