@@ -189,13 +189,13 @@ class InvokeAIInstantCharacterBridge:
             clip_outputs = self.text_encoder(clip_inputs.input_ids)
             # Get pooled output for CLIP
             if hasattr(clip_outputs, 'pooler_output') and clip_outputs.pooler_output is not None:
-                clip_embeds = clip_outputs.pooler_output
+                clip_embeds = clip_outputs.pooler_output.to(self.dtype)
             elif hasattr(clip_outputs, 'last_hidden_state'):
                 # Use [CLS] token (first token) if no pooled output
-                clip_embeds = clip_outputs.last_hidden_state[:, 0]
+                clip_embeds = clip_outputs.last_hidden_state[:, 0].to(self.dtype)
             else:
                 # Fallback: mean pooling
-                clip_embeds = clip_outputs[0].mean(dim=1)
+                clip_embeds = clip_outputs[0].mean(dim=1).to(self.dtype)
             
         # T5 encoding  
         t5_inputs = self.t5_tokenizer(
@@ -210,9 +210,9 @@ class InvokeAIInstantCharacterBridge:
             t5_outputs = self.text_encoder_2(t5_inputs.input_ids)
             # Get hidden states for T5
             if hasattr(t5_outputs, 'last_hidden_state'):
-                t5_embeds = t5_outputs.last_hidden_state
+                t5_embeds = t5_outputs.last_hidden_state.to(self.dtype)
             else:
-                t5_embeds = t5_outputs[0]
+                t5_embeds = t5_outputs[0].to(self.dtype)
             
         return {
             "clip_embeds": clip_embeds,
