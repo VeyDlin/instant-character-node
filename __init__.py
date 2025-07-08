@@ -1,1 +1,1 @@
-from .instant_character import InstantCharacterIvocation
+from .instant_character import InstantCharacterFluxInvocation

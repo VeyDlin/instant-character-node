@@ -1,12 +1,7 @@
 from typing import Optional
 from pathlib import Path
 import torch
-from contextlib import ExitStack
-from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
-from diffusers.models import AutoencoderKL, FluxTransformer2DModel
-from diffusers import FlowMatchEulerDiscreteScheduler
-
-from .InstantCharacter.pipeline import InstantCharacterFluxPipeline
+from PIL import Image
 
 from invokeai.invocation_api import (
     BaseInvocation,
@@ -18,181 +13,199 @@ from invokeai.invocation_api import (
     UIType,
     FieldDescriptions,
     ModelIdentifierField,
-    ImageOutput
+    ImageOutput,
+    BaseInvocationOutput,
+    OutputField
 )
-from invokeai.backend.flux.model import Flux
-from invokeai.backend.model_manager.taxonomy import ModelFormat
-from invokeai.app.invocations.model import ModelIdentifierField, LoRAField
-from invokeai.backend.model_manager.taxonomy import SubModelType
-from invokeai.app.util.t5_model_identifier import (
-    preprocess_t5_encoder_model_identifier,
-    preprocess_t5_tokenizer_model_identifier,
+from invokeai.app.invocations.model import (
+    TransformerField, 
+    CLIPField, 
+    T5EncoderField, 
+    VAEField,
+    LoRAField
 )
+from invokeai.backend.util.logging import InvokeAILogger
+
+from .instant_character_bridge import InvokeAIInstantCharacterBridge
+
+logger = InvokeAILogger.get_logger(__name__)
+
 
 @invocation(
-    "instant_character",
-    title="Instant Character",
-    tags=["generate", "character", "flux"],
-    category="generate",
+    "instant_character_flux",
+    title="InstantCharacter FLUX",
+    tags=["flux", "character", "ip-adapter"],
+    category="flux",
     version="1.0.0",
 )
-class InstantCharacterIvocation(BaseInvocation):
-    """Instant Character"""
-    model: ModelIdentifierField = InputField(
-        description=FieldDescriptions.flux_model,
-        ui_type=UIType.FluxMainModel,
-        input=Input.Direct,
+class InstantCharacterFluxInvocation(BaseInvocation):
+    """Apply InstantCharacter IP-Adapter to FLUX models for character-consistent generation"""
+    
+    # Model inputs from previous nodes (FluxModelLoader, FluxLoRALoader)
+    transformer: Optional[TransformerField] = InputField(
+        default=None,
+        description="FLUX transformer from FluxModelLoader",
+        input=Input.Connection,
+        title="Transformer"
     )
-    t5_encoder_model: ModelIdentifierField = InputField(
-        description=FieldDescriptions.t5_encoder, ui_type=UIType.T5EncoderModel, input=Input.Direct, title="T5 Encoder"
+    clip: Optional[CLIPField] = InputField(
+        default=None,
+        description="CLIP from FluxModelLoader", 
+        input=Input.Connection,
+        title="CLIP"
     )
-    clip_embed_model: ModelIdentifierField = InputField(
-        description=FieldDescriptions.clip_embed_model,
-        ui_type=UIType.CLIPEmbedModel,
-        input=Input.Direct,
-        title="CLIP Embed",
+    t5_encoder: Optional[T5EncoderField] = InputField(
+        default=None,
+        description="T5 Encoder from FluxModelLoader",
+        input=Input.Connection,
+        title="T5 Encoder"
     )
-    vae_model: ModelIdentifierField = InputField(
-        description=FieldDescriptions.vae_model, ui_type=UIType.FluxVAEModel, title="VAE"
+    vae: Optional[VAEField] = InputField(
+        default=None,
+        description="VAE from FluxModelLoader",
+        input=Input.Connection,
+        title="VAE"
     )
-    ip_adapter: str = InputField(default="Tencent/InstantCharacter")
-    image_encoder: str = InputField(default="google/siglip-so400m-patch14-384")
-    image_encoder_2: str = InputField(default="facebook/dinov2-giant")
-    cpu_offload: bool = InputField(default=False)
-    lora: Optional[LoRAField]  = InputField(
-        default=None, description=FieldDescriptions.lora_model, title="LoRA"
+    
+    # InstantCharacter specific parameters
+    subject_image: ImageField = InputField(
+        description="Reference character image",
+        title="Character Image"
     )
-    subject_image: ImageField = InputField()
-    prompt: str = InputField()
-    prompt_with_lora_trigger: str = InputField()
-    subject_scale: float = InputField(default=0.9, ge=0, le=2)      
-    width: int = InputField(default=1024, multiple_of=64)             
-    height: int = InputField(default=1024, multiple_of=64)             
-    guidance_scale: float = InputField(default=3.5, ge=0, le=10) 
-    num_inference_steps: int = InputField(default=28, ge=1, le=100) 
-    seed: int = InputField(default=0, ge=0, le=0xffffffffffffffff)  
+    prompt: str = InputField(
+        description="Text prompt for generation",
+        title="Prompt"
+    )
+    
+    # InstantCharacter model paths
+    ip_adapter: str = InputField(
+        default="Tencent/InstantCharacter",
+        description="InstantCharacter IP-Adapter model path or HuggingFace repo",
+        title="IP-Adapter Model"
+    )
+    image_encoder: str = InputField(
+        default="google/siglip-so400m-patch14-384",
+        description="SigLIP image encoder model path",
+        title="SigLIP Encoder"
+    )
+    image_encoder_2: str = InputField(
+        default="facebook/dinov2-giant",
+        description="DINOv2 image encoder model path", 
+        title="DINOv2 Encoder"
+    )
+    
+    # Generation parameters
+    subject_scale: float = InputField(
+        default=0.9,
+        ge=0.0,
+        le=2.0,
+        description="Strength of character conditioning",
+        title="Character Strength"
+    )
+    width: int = InputField(
+        default=1024,
+        multiple_of=64,
+        description="Image width",
+        title="Width"
+    )
+    height: int = InputField(
+        default=1024,
+        multiple_of=64,
+        description="Image height",
+        title="Height"
+    )
+    guidance_scale: float = InputField(
+        default=3.5,
+        ge=0.0,
+        le=10.0,
+        description="Guidance scale for generation",
+        title="Guidance Scale"
+    )
+    num_inference_steps: int = InputField(
+        default=28,
+        ge=1,
+        le=100,
+        description="Number of denoising steps",
+        title="Steps"
+    )
+    seed: int = InputField(
+        default=0,
+        ge=0,
+        le=0xffffffffffffffff,
+        description="Random seed for generation",
+        title="Seed"
+    )
 
     def invoke(self, context: InvocationContext) -> ImageOutput:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        inference_dtype = torch.bfloat16
-
-        # CLIP
-        load_clip_tokenizer = self.clip_embed_model.model_copy(update={"submodel_type": SubModelType.Tokenizer})
-        load_clip_text_encoder = self.clip_embed_model.model_copy(update={"submodel_type": SubModelType.TextEncoder})
-        clip_text_encoder_info = context.models.load(load_clip_text_encoder)
-        clip_text_encoder_config = clip_text_encoder_info.config
-        assert clip_text_encoder_config is not None
-
-        # T5 encoder
-        load_t5_encoder_tokenizer = preprocess_t5_tokenizer_model_identifier(self.t5_encoder_model)
-        load_t5_encoder_text_encoder = preprocess_t5_encoder_model_identifier(self.t5_encoder_model)
-        t5_encoder_info = context.models.load(load_t5_encoder_text_encoder)
-        t5_encoder_config = t5_encoder_info.config
-        assert t5_encoder_config is not None
-
-        # Transformer
-        load_transformer = self.model.model_copy(update={"submodel_type": SubModelType.Transformer})
-        transformer_config = context.models.get_config(load_transformer)
-        assert transformer_config is not None
-        
-        # VAE
-        load_vae = self.vae_model.model_copy(update={"submodel_type": SubModelType.VAE})
-        vae_info = context.models.load(load_vae)
-
-        with (
-            clip_text_encoder_info.model_on_device() as (cached_weights, clip_text_encoder),
-            context.models.load(load_clip_tokenizer) as clip_tokenizer,
-            t5_encoder_info.model_on_device() as (cached_weights, t5_text_encoder),
-            context.models.load(load_t5_encoder_tokenizer) as t5_tokenizer,
-            vae_info.model_on_device() as (_, vae),
-            ExitStack() as exit_stack,
-        ):
-            assert isinstance(clip_text_encoder, CLIPTextModel)
-            assert isinstance(clip_tokenizer, CLIPTokenizer)
-            assert isinstance(t5_text_encoder, T5EncoderModel)
-            assert isinstance(t5_tokenizer, T5TokenizerFast)
-            assert isinstance(vae, AutoencoderKL)
-
-            (cached_weights, transformer) = exit_stack.enter_context(
-                context.models.load(load_transformer).model_on_device()
+        # Validate inputs
+        if not all([self.transformer, self.clip, self.t5_encoder, self.vae]):
+            raise ValueError(
+                "InstantCharacter requires all model components. "
+                "Please connect outputs from 'Main Model - FLUX' node."
             )
-            assert isinstance(transformer, Flux) # TODO: FluxTransformer2DModel
-            if transformer_config.format in [ModelFormat.Checkpoint]:
-                model_is_quantized = False
-            elif transformer_config.format in [
-                ModelFormat.BnbQuantizedLlmInt8b,
-                ModelFormat.BnbQuantizednf4b,
-                ModelFormat.GGUFQuantized,
-            ]:
-                model_is_quantized = True
-            else:
-                raise ValueError(f"Unsupported model format: {transformer_config.format}")
-
-            pipe = InstantCharacterFluxPipeline(
-                transformer=transformer,
-                text_encoder=clip_text_encoder,
-                tokenizer=clip_tokenizer,
-                text_encoder_2=t5_text_encoder,
-                tokenizer_2=t5_tokenizer,
-                vae=vae,
-                scheduler=FlowMatchEulerDiscreteScheduler(
-                    num_train_timesteps=1000,
-                    beta_start=0.00085,
-                    beta_end=0.012,
-                    beta_schedule="scaled_linear",
-                    prediction_type="epsilon"
-                )
-            )
-
-            if self.cpu_offload:
-                pipe.enable_sequential_cpu_offload()
-            else:
-                pipe.to(device=device, dtype=inference_dtype)
             
-            pipe.init_adapter(
-                image_encoder_path=self.image_encoder,
-                cache_dir=Path(context.config.get().download_cache_dir).resolve(),
-                image_encoder_2_path=self.image_encoder_2,
-                cache_dir_2=Path(context.config.get().download_cache_dir).resolve(),
-                subject_ipadapter_cfg=dict(
-                    subject_ip_adapter_path=self.ip_adapter,
-                    nb_token=1024
-                ),
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        inference_dtype = torch.bfloat16
+        
+        logger.info("Starting InstantCharacter FLUX generation")
+        
+        # Load model components using the field references
+        load_clip_tokenizer = self.clip.tokenizer
+        load_clip_text_encoder = self.clip.text_encoder
+        load_t5_encoder_tokenizer = self.t5_encoder.tokenizer
+        load_t5_encoder_text_encoder = self.t5_encoder.text_encoder
+        load_transformer = self.transformer.transformer
+        load_vae = self.vae.vae
+        
+        # Load all components with InvokeAI memory management
+        with (
+            context.models.load(load_clip_text_encoder).model_on_device() as (_, clip_text_encoder),
+            context.models.load(load_clip_tokenizer) as clip_tokenizer,
+            context.models.load(load_t5_encoder_text_encoder).model_on_device() as (_, t5_text_encoder),
+            context.models.load(load_t5_encoder_tokenizer) as t5_tokenizer,
+            context.models.load(load_vae).model_on_device() as (_, vae_model),
+            context.models.load(load_transformer).model_on_device() as (_, transformer),
+        ):
+            logger.info("All FLUX models loaded successfully")
+            
+            # Create bridge between InvokeAI and InstantCharacter
+            bridge = InvokeAIInstantCharacterBridge(
+                transformer=transformer,
+                vae=vae_model,
+                text_encoder=clip_text_encoder,
+                text_encoder_2=t5_text_encoder,
+                clip_tokenizer=clip_tokenizer,
+                t5_tokenizer=t5_tokenizer,
+                device=device,
+                dtype=inference_dtype
             )
-
+            
+            # Initialize InstantCharacter components
+            bridge.init_instant_character(
+                context=context,
+                siglip_path=self.image_encoder,
+                dinov2_path=self.image_encoder_2,
+                ip_adapter_path=self.ip_adapter,
+                nb_token=1024
+            )
+            
+            # Get subject image
             subject_image_pil = context.images.get_pil(self.subject_image.image_name).convert('RGB')
-
-            output = None
-            if self.lora is None:
-                output = pipe(
-                    prompt=self.prompt,
-                    height=self.height,
-                    width=self.width,
-                    guidance_scale=self.guidance_scale,
-                    num_inference_steps=self.num_inference_steps,
-                    generator=torch.Generator("cpu").manual_seed(self.seed),
-                    subject_image=subject_image_pil,
-                    subject_scale=self.subject_scale,
-                )
-            else:
-                lora_config = context.models.get_config(self.lora.lora)
-                lora_path = (Path(context.config.get().models_dir) / lora_config.path).resolve()
-                output = pipe.with_style_lora(
-                    lora_file_path=lora_path,
-                    lora_weight=self.lora.weight,
-                    prompt_with_lora_trigger=self.prompt_with_lora_trigger,
-
-                    prompt=self.prompt,
-                    height=self.height,
-                    width=self.width,
-                    guidance_scale=self.guidance_scale,
-                    num_inference_steps=self.num_inference_steps,
-                    generator=torch.Generator("cpu").manual_seed(self.seed),
-                    subject_image=subject_image_pil,
-                    subject_scale=self.subject_scale,
-                )
-
-            image_dto = context.images.save(image=output.images[0])
-
+            
+            # Run InstantCharacter generation
+            output_image = bridge.denoise_with_instant_character(
+                prompt=self.prompt,
+                subject_image=subject_image_pil,
+                height=self.height,
+                width=self.width,
+                num_inference_steps=self.num_inference_steps,
+                guidance_scale=self.guidance_scale,
+                subject_scale=self.subject_scale,
+                seed=self.seed
+            )
+            
+            # Save result
+            image_dto = context.images.save(image=output_image)
+            
+            logger.info("InstantCharacter generation completed successfully")
             return ImageOutput.build(image_dto)
-
