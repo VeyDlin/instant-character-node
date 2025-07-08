@@ -90,11 +90,14 @@ class InvokeAIInstantCharacterBridge:
             else:
                 raise FileNotFoundError(f"IP-Adapter file not found: {model_path}")
         
-        # Store model paths for lazy loading during image encoding
-        self.siglip_path = siglip_path
-        self.dinov2_path = dinov2_path
-        self.load_siglip = load_siglip
-        self.load_dinov2 = load_dinov2
+        # Load components through InvokeAI system
+        with context.models.load_remote_model(source=siglip_path, loader=load_siglip) as (siglip_encoder, siglip_processor):
+            self.image_encoder.siglip_encoder = siglip_encoder.to(self.device)
+            self.image_encoder.siglip_processor = siglip_processor
+            
+        with context.models.load_remote_model(source=dinov2_path, loader=load_dinov2) as (dinov2_encoder, dinov2_processor):
+            self.image_encoder.dinov2_encoder = dinov2_encoder.to(self.device)
+            self.image_encoder.dinov2_processor = dinov2_processor
         
         # Load IP-Adapter through InvokeAI system
         # Note: Using direct URL to bypass InvokeAI's file filtering
