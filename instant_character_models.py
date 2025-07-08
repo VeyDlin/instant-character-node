@@ -175,8 +175,12 @@ class InstantCharacterIPAdapter:
             raise RuntimeError("IP-Adapter not loaded")
             
         with torch.inference_mode():
+            # CrossLayerCrossScaleProjector expects individual embeddings as arguments
             subject_embeds = self.image_proj_model(
-                image_embeds_dict,
-                timestep=timestep
-            )
+                low_res_shallow=image_embeds_dict['image_embeds_low_res_shallow'],
+                low_res_deep=image_embeds_dict['image_embeds_low_res_deep'],
+                high_res_deep=image_embeds_dict['image_embeds_high_res_deep'],
+                timesteps=timestep.to(dtype=self.dtype),
+                need_temb=True
+            )[0]  # Returns tuple, we need first element
         return subject_embeds

@@ -296,18 +296,29 @@ class InvokeAIInstantCharacterBridge:
             image_seq_len=packed_latents.shape[1],
         )
         
+        # Extract actual timestep values for precomputation
+        if hasattr(timesteps, 'cpu'):
+            timestep_values = timesteps.cpu().numpy().tolist()
+        elif isinstance(timesteps, (list, tuple)):
+            timestep_values = list(timesteps)
+        else:
+            timestep_values = [float(t) for t in timesteps]
+        
         # Step callback for progress
         def step_callback(state: PipelineIntermediateState) -> None:
             logger.debug(f"Step {state.step}/{len(timesteps)-1}, timestep: {state.timestep}")
         
-        # Create InstantCharacter extensions
+        # Create InstantCharacter extensions with proper parameters
         pos_ip_adapter_extensions, neg_ip_adapter_extensions = create_instant_character_extensions(
-            transformer=self.transformer,
-            ip_adapter=self.ip_adapter,
+            ip_adapter_layers=self.ip_adapter.ip_adapter_layers,
+            image_proj_model=self.ip_adapter.image_proj_model,
             subject_embeds_dict=subject_embeds_dict,
+            timesteps=timestep_values,
             weight=subject_scale,
             begin_step_percent=0.0,
-            end_step_percent=1.0
+            end_step_percent=1.0,
+            device=self.device,
+            dtype=self.dtype
         )
         
         # Run InvokeAI FLUX denoising
