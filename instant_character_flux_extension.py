@@ -174,7 +174,14 @@ class InstantCharacterFluxExtension:
             
             # Extract tensor dimensions
             batch_size, seq_len, hidden_size = img.shape
-            heads = attn.heads
+            # Get heads from config since InvokeAI SelfAttention doesn't expose heads directly
+            if hasattr(attn, 'heads'):
+                heads = attn.heads
+            elif hasattr(attn, 'num_heads'):
+                heads = attn.num_heads
+            else:
+                # Fallback: calculate from hidden size (standard FLUX uses 24 heads)
+                heads = 24
             head_dim = hidden_size // heads
             
             # Validate subject embeddings shape
