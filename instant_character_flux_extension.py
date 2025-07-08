@@ -44,27 +44,29 @@ class InstantCharacterFluxExtension:
         self._precompute_subject_embeddings(subject_embeds_dict, timesteps)
         
     def _precompute_subject_embeddings(self, subject_embeds_dict: Dict[str, torch.Tensor], timesteps: List[float]):
-        """Precompute time-conditioned subject embeddings for all timesteps"""
-        self._subject_embeddings = []
+        """Store subject embeddings dict and timesteps for on-demand computation"""
+        self._subject_embeds_dict = subject_embeds_dict
+        self._timesteps = timesteps
+        logger.debug(f"Stored subject embeddings dict for {len(timesteps)} timesteps (computed on-demand)")
         
-        logger.debug(f"Precomputing subject embeddings for {len(timesteps)} timesteps")
+    def _get_subject_embedding_for_timestep(self, timestep_index: int) -> torch.Tensor:
+        """Compute subject embedding for specific timestep on-demand"""
+        if timestep_index >= len(self._timesteps):
+            raise IndexError(f"Timestep index {timestep_index} out of range")
+            
+        timestep = self._timesteps[timestep_index]
+        timestep_tensor = torch.tensor([timestep / 1000.0], device=self.device, dtype=self.dtype)
         
-        for timestep in timesteps:
-            # Convert timestep to tensor with proper scaling (like in original pipeline)
-            timestep_tensor = torch.tensor([timestep / 1000.0], device=self.device, dtype=self.dtype)
+        with torch.inference_mode():
+            subject_embeds = self.image_proj_model(
+                low_res_shallow=self._subject_embeds_dict['image_embeds_low_res_shallow'],
+                low_res_deep=self._subject_embeds_dict['image_embeds_low_res_deep'],
+                high_res_deep=self._subject_embeds_dict['image_embeds_high_res_deep'],
+                timesteps=timestep_tensor,
+                need_temb=True
+            )[0]  # Extract first element from tuple
             
-            # Project subject embeddings with time conditioning using CrossLayerCrossScaleProjector
-            with torch.inference_mode():
-                subject_embeds = self.image_proj_model(
-                    low_res_shallow=subject_embeds_dict['image_embeds_low_res_shallow'],
-                    low_res_deep=subject_embeds_dict['image_embeds_low_res_deep'],
-                    high_res_deep=subject_embeds_dict['image_embeds_high_res_deep'],
-                    timesteps=timestep_tensor,
-                    need_temb=True
-                )[0]  # Extract first element from tuple
-                
-            self._subject_embeddings.append(subject_embeds)
-            
+        return subject_embeds
         
     def should_apply_at_step(self, timestep_index: int, total_num_timesteps: int) -> bool:
         """Check if InstantCharacter should be applied at current step"""
@@ -109,14 +111,9 @@ class InstantCharacterFluxExtension:
         if current_weight == 0.0:
             return img
             
-        # Validate inputs
-        if timestep_index >= len(self._subject_embeddings):
-            logger.error(f"No subject embeddings for timestep {timestep_index}/{len(self._subject_embeddings)}")
-            return img
-            
         try:
-            # Get precomputed subject embeddings for current timestep
-            subject_embeds = self._subject_embeddings[timestep_index]
+            # Get subject embeddings for current timestep (computed on-demand)
+            subject_embeds = self._get_subject_embedding_for_timestep(timestep_index)
             
             # Get IP-Adapter layer for this block
             layer_key = f"layer_{block_index}"
