@@ -204,13 +204,15 @@ class InstantCharacterFluxExtension:
             ip_query = ip_layer.norm_ip_q(ip_query)  # RMSNorm normalization
             ip_query = rearrange(ip_query, 'b h l d -> (b h) l d')  # Flatten for attention
             
-            # 2. Project subject embeddings to key and value
-            ip_key = ip_layer.to_k_ip(subject_embeds)  # [B, num_tokens, hidden_size]
+            # 2. Project subject embeddings to key and value  
+            # Clone subject_embeds to avoid inference tensor issues
+            subject_embeds_clone = subject_embeds.clone()
+            ip_key = ip_layer.to_k_ip(subject_embeds_clone)  # [B, num_tokens, hidden_size]
             ip_key = rearrange(ip_key, 'b l (h d) -> b h l d', h=heads)
             ip_key = ip_layer.norm_ip_k(ip_key)  # RMSNorm normalization
             ip_key = rearrange(ip_key, 'b h l d -> (b h) l d')  # Flatten for attention
             
-            ip_value = ip_layer.to_v_ip(subject_embeds)  # [B, num_tokens, hidden_size]
+            ip_value = ip_layer.to_v_ip(subject_embeds_clone)  # [B, num_tokens, hidden_size]
             ip_value = rearrange(ip_value, 'b l (h d) -> (b h) l d', h=heads)
             
             # 3. Compute scaled dot product attention between query and IP projections
