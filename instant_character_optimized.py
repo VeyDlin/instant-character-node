@@ -298,6 +298,10 @@ class InstantCharacterFluxOptimizedInvocation(BaseInvocation):
                             end_step_percent=1.0,
                         )
                         
+                        # Step callback
+                        def step_callback(state: PipelineIntermediateState) -> None:
+                            pass  # Could add progress reporting here
+                        
                         # Denoise
                         denoised_latents = denoise(
                             model=transformer,
@@ -306,7 +310,7 @@ class InstantCharacterFluxOptimizedInvocation(BaseInvocation):
                             pos_regional_prompting_extension=pos_regional_ext,
                             neg_regional_prompting_extension=None,
                             timesteps=timesteps,
-                            step_callback=None,
+                            step_callback=step_callback,
                             guidance=self.guidance_scale,
                             cfg_scale=[1.0] * len(timesteps),
                             inpaint_extension=None,
