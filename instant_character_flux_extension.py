@@ -285,9 +285,10 @@ def create_instant_character_extensions(
         dtype=dtype
     )
     
+    # TEMPORARY: Return empty extensions to test memory without InstantCharacter
     # Return as positive IP-Adapter extension
     # InvokeAI's CustomDoubleStreamBlockProcessor expects extensions with run_ip_adapter method
-    pos_extensions = [ic_extension]
+    pos_extensions = []  # Temporarily disabled
     neg_extensions = []  # InstantCharacter doesn't use negative extensions
     
     return pos_extensions, neg_extensions
