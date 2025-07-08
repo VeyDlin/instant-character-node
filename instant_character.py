@@ -168,41 +168,48 @@ class InstantCharacterFluxInvocation(BaseInvocation):
         ):
             logger.info("All FLUX models loaded successfully")
             
+            # TEMPORARY: Skip bridge creation to test memory
             # Create bridge between InvokeAI and InstantCharacter
-            bridge = InvokeAIInstantCharacterBridge(
-                transformer=transformer,
-                vae=vae_model,
-                text_encoder=clip_text_encoder,
-                text_encoder_2=t5_text_encoder,
-                clip_tokenizer=clip_tokenizer,
-                t5_tokenizer=t5_tokenizer,
-                device=device,
-                dtype=inference_dtype
-            )
+            # bridge = InvokeAIInstantCharacterBridge(
+            #     transformer=transformer,
+            #     vae=vae_model,
+            #     text_encoder=clip_text_encoder,
+            #     text_encoder_2=t5_text_encoder,
+            #     clip_tokenizer=clip_tokenizer,
+            #     t5_tokenizer=t5_tokenizer,
+            #     device=device,
+            #     dtype=inference_dtype
+            # )
             
-            # Initialize InstantCharacter components
-            bridge.init_instant_character(
-                context=context,
-                siglip_path=self.image_encoder,
-                dinov2_path=self.image_encoder_2,
-                ip_adapter_path=self.ip_adapter,
-                nb_token=1024
-            )
+            # # Initialize InstantCharacter components
+            # bridge.init_instant_character(
+            #     context=context,
+            #     siglip_path=self.image_encoder,
+            #     dinov2_path=self.image_encoder_2,
+            #     ip_adapter_path=self.ip_adapter,
+            #     nb_token=1024
+            # )
+            bridge = None
             
             # Get subject image
             subject_image_pil = context.images.get_pil(self.subject_image.image_name).convert('RGB')
             
+            # TEMPORARY: Skip denoise to test memory
             # Run InstantCharacter generation
-            output_image = bridge.denoise_with_instant_character(
-                prompt=self.prompt,
-                subject_image=subject_image_pil,
-                height=self.height,
-                width=self.width,
-                num_inference_steps=self.num_inference_steps,
-                guidance_scale=self.guidance_scale,
-                subject_scale=self.subject_scale,
-                seed=self.seed
-            )
+            # output_image = bridge.denoise_with_instant_character(
+            #     prompt=self.prompt,
+            #     subject_image=subject_image_pil,
+            #     height=self.height,
+            #     width=self.width,
+            #     num_inference_steps=self.num_inference_steps,
+            #     guidance_scale=self.guidance_scale,
+            #     subject_scale=self.subject_scale,
+            #     seed=self.seed
+            # )
+            
+            # Create a simple test image
+            import numpy as np
+            output_image = Image.fromarray(np.zeros((self.height, self.width, 3), dtype=np.uint8))
             
             # Save result
             image_dto = context.images.save(image=output_image)
