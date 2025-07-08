@@ -145,6 +145,9 @@ class InstantCharacterFluxExtension:
                 img = img + ip_conditioning
                 logger.debug(f"Applied InstantCharacter at block {block_index}, timestep {timestep_index}, weight: {current_weight:.3f}")
                 
+            # Move layer back to CPU to free VRAM
+            ip_layer = ip_layer.to('cpu')
+                
         except Exception as e:
             logger.error(f"Error in InstantCharacter IP-Adapter at block {block_index}: {e}")
             import traceback

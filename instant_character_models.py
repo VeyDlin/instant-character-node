@@ -121,14 +121,20 @@ class InstantCharacterIPAdapter:
             num_layers = len([k for k in ip_adapter_state.keys() if k.endswith('.norm_ip_q.scale')])
             logger.info(f"Found {num_layers} IP-Adapter attention layers")
             
+            # TEMPORARY: Only create layers for double stream blocks (0-18) to save memory
+            # Skip single stream blocks (19-56) for now
+            max_double_stream_blocks = 19  # FLUX has 19 double stream blocks
+            
             # Create IP-Adapter layers
-            for i in range(num_layers):
+            for i in range(min(num_layers, max_double_stream_blocks)):
                 layer_name = f"layer_{i}"
                 layer = FluxIPAttnProcessor(
                     hidden_size=hidden_size,
                     ip_hidden_states_dim=ip_hidden_states_dim,
                 ).to('cpu', dtype=self.dtype)  # Keep on CPU initially
                 self.ip_adapter_layers[layer_name] = layer
+                
+            logger.info(f"Created {len(self.ip_adapter_layers)} IP-Adapter layers (limiting to double stream blocks)")
                 
             # Load weights into the IP-Adapter layers
             ip_layers_module = torch.nn.ModuleList(self.ip_adapter_layers.values())
