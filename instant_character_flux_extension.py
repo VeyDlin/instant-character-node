@@ -47,7 +47,7 @@ class InstantCharacterFluxExtension:
         """Precompute time-conditioned subject embeddings for all timesteps"""
         self._subject_embeddings = []
         
-        logger.info(f"Precomputing subject embeddings for {len(timesteps)} timesteps")
+        logger.debug(f"Precomputing subject embeddings for {len(timesteps)} timesteps")
         
         for timestep in timesteps:
             # Convert timestep to tensor with proper scaling (like in original pipeline)
@@ -65,7 +65,6 @@ class InstantCharacterFluxExtension:
                 
             self._subject_embeddings.append(subject_embeds)
             
-        logger.info("Subject embeddings precomputed successfully")
         
     def should_apply_at_step(self, timestep_index: int, total_num_timesteps: int) -> bool:
         """Check if InstantCharacter should be applied at current step"""

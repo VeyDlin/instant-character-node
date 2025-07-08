@@ -33,7 +33,7 @@ logger = InvokeAILogger.get_logger(__name__)
 
 @invocation(
     "instant_character_flux",
-    title="InstantCharacter FLUX",
+    title="InstantCharacter - FLUX",
     tags=["flux", "character", "ip-adapter"],
     category="flux",
     version="1.0.0",
@@ -79,8 +79,8 @@ class InstantCharacterFluxInvocation(BaseInvocation):
     
     # InstantCharacter model paths
     ip_adapter: str = InputField(
-        default="Tencent/InstantCharacter",
-        description="InstantCharacter IP-Adapter model path or HuggingFace repo",
+        default="https://huggingface.co/Tencent/InstantCharacter/resolve/main/instantcharacter_ip-adapter.bin",
+        description="InstantCharacter IP-Adapter direct file URL",
         title="IP-Adapter Model"
     )
     image_encoder: str = InputField(

@@ -57,7 +57,7 @@ class InvokeAIInstantCharacterBridge:
         context: InvocationContext,
         siglip_path: str = "google/siglip-so400m-patch14-384",
         dinov2_path: str = "facebook/dinov2-giant", 
-        ip_adapter_path: str = "Tencent/InstantCharacter",
+        ip_adapter_path: str = "https://huggingface.co/Tencent/InstantCharacter/resolve/main/instantcharacter_ip-adapter.bin",
         nb_token: int = 1024
     ):
         """Initialize InstantCharacter components"""
@@ -68,7 +68,6 @@ class InvokeAIInstantCharacterBridge:
         
         # Load image encoders through InvokeAI remote model system
         def load_siglip(model_path):
-            logger.info(f"Loading SigLIP from: {model_path}")
             from transformers import SiglipVisionModel, SiglipImageProcessor
             return (
                 SiglipVisionModel.from_pretrained(model_path, torch_dtype=self.dtype),
@@ -76,33 +75,20 @@ class InvokeAIInstantCharacterBridge:
             )
             
         def load_dinov2(model_path):
-            logger.info(f"Loading DINOv2 from: {model_path}")
             from transformers import AutoModel, AutoImageProcessor
             encoder = AutoModel.from_pretrained(model_path, torch_dtype=self.dtype)
             processor = AutoImageProcessor.from_pretrained(model_path)
-            # Configure processor
             processor.crop_size = dict(height=384, width=384)
             processor.size = dict(shortest_edge=384)
             return encoder, processor
             
         # Load IP-Adapter through InvokeAI system
         def load_ip_adapter(model_path):
-            logger.info(f"Loading IP-Adapter from: {model_path}")
-            # For IP-Adapter we just need to download the file
-            from huggingface_hub import hf_hub_download
-            if "/" in model_path and not model_path.startswith("/"):
-                # HuggingFace repo format
-                repo_id = model_path
-                filename = "instantcharacter_ip-adapter.bin"
-                ip_path = hf_hub_download(
-                    repo_id=repo_id,
-                    filename=filename,
-                    cache_dir=cache_dir,
-                )
-                return ip_path
+            ip_path = Path(model_path)
+            if ip_path.is_file():
+                return str(ip_path)
             else:
-                # Local path
-                return Path(model_path)
+                raise FileNotFoundError(f"IP-Adapter file not found: {model_path}")
         
         # Load components through InvokeAI system
         with context.models.load_remote_model(source=siglip_path, loader=load_siglip) as (siglip_encoder, siglip_processor):
@@ -114,6 +100,7 @@ class InvokeAIInstantCharacterBridge:
             self.image_encoder.dinov2_processor = dinov2_processor
         
         # Load IP-Adapter through InvokeAI system
+        # Note: Using direct URL to bypass InvokeAI's file filtering
         with context.models.load_remote_model(source=ip_adapter_path, loader=load_ip_adapter) as ip_path:
             # Initialize IP-Adapter with downloaded file
             self.ip_adapter = InstantCharacterIPAdapter(
