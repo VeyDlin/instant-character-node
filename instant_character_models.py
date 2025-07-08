@@ -118,7 +118,7 @@ class InstantCharacterIPAdapter:
             ip_adapter_state = state_dict["ip_adapter"]
             
             # Count the number of attention processors in the state dict
-            num_layers = len([k for k in ip_adapter_state.keys() if k.endswith('.norm_ip_q.weight')])
+            num_layers = len([k for k in ip_adapter_state.keys() if k.endswith('.norm_ip_q.scale')])
             logger.info(f"Found {num_layers} IP-Adapter attention layers")
             
             # Create IP-Adapter layers

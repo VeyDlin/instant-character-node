@@ -245,7 +245,8 @@ class InvokeAIInstantCharacterBridge:
         # Create text conditioning
         pos_conditioning = FluxTextConditioning(
             t5_embeddings=t5_embeds,
-            clip_embeddings=clip_embeds
+            clip_embeddings=clip_embeds,
+            mask=None
         )
         
         # Prepare latents
