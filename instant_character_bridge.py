@@ -85,22 +85,24 @@ class InvokeAIInstantCharacterBridge:
             processor.size = dict(shortest_edge=384)
             return encoder, processor
             
-        # Download IP-Adapter directly using HuggingFace Hub
-        def download_ip_adapter(repo_id, filename="instantcharacter_ip-adapter.bin"):
-            logger.info(f"Downloading IP-Adapter from HuggingFace: {repo_id}")
+        # Load IP-Adapter through InvokeAI system
+        def load_ip_adapter(model_path):
+            logger.info(f"Loading IP-Adapter from: {model_path}")
+            # For IP-Adapter we just need to download the file
             from huggingface_hub import hf_hub_download
-            try:
+            if "/" in model_path and not model_path.startswith("/"):
+                # HuggingFace repo format
+                repo_id = model_path
+                filename = "instantcharacter_ip-adapter.bin"
                 ip_path = hf_hub_download(
                     repo_id=repo_id,
                     filename=filename,
                     cache_dir=cache_dir,
-                    # HF token will be used automatically if configured in InvokeAI
                 )
-                logger.info(f"IP-Adapter downloaded to: {ip_path}")
                 return ip_path
-            except Exception as e:
-                logger.error(f"Failed to download IP-Adapter: {e}")
-                raise
+            else:
+                # Local path
+                return Path(model_path)
         
         # Load components through InvokeAI system
         with context.models.load_remote_model(source=siglip_path, loader=load_siglip) as (siglip_encoder, siglip_processor):
@@ -111,24 +113,16 @@ class InvokeAIInstantCharacterBridge:
             self.image_encoder.dinov2_encoder = dinov2_encoder.to(self.device)
             self.image_encoder.dinov2_processor = dinov2_processor
         
-        # Download IP-Adapter file directly
-        if ip_adapter_path.startswith("http") or "/" in ip_adapter_path:
-            # HuggingFace repo or URL
-            ip_path = download_ip_adapter(ip_adapter_path)
-        else:
-            # Local path
-            ip_path = Path(ip_adapter_path)
-            if not ip_path.exists():
-                raise FileNotFoundError(f"IP-Adapter file not found: {ip_path}")
-        
-        # Initialize IP-Adapter with downloaded file
-        self.ip_adapter = InstantCharacterIPAdapter(
-            self.transformer, 
-            self.text_encoder_2,
-            self.device,
-            self.dtype
-        )
-        self.ip_adapter.load_ip_adapter(str(ip_path), nb_token)
+        # Load IP-Adapter through InvokeAI system
+        with context.models.load_remote_model(source=ip_adapter_path, loader=load_ip_adapter) as ip_path:
+            # Initialize IP-Adapter with downloaded file
+            self.ip_adapter = InstantCharacterIPAdapter(
+                self.transformer, 
+                self.text_encoder_2,
+                self.device,
+                self.dtype
+            )
+            self.ip_adapter.load_ip_adapter(str(ip_path), nb_token)
             
         logger.info("InstantCharacter bridge initialized successfully")
     
