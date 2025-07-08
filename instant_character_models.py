@@ -127,7 +127,7 @@ class InstantCharacterIPAdapter:
                 layer = FluxIPAttnProcessor(
                     hidden_size=hidden_size,
                     ip_hidden_states_dim=ip_hidden_states_dim,
-                ).to(self.device, dtype=self.dtype)
+                ).to('cpu', dtype=self.dtype)  # Keep on CPU initially
                 self.ip_adapter_layers[layer_name] = layer
                 
             # Load weights into the IP-Adapter layers
@@ -163,7 +163,7 @@ class InstantCharacterIPAdapter:
         )
         
         self.image_proj_model.eval()
-        self.image_proj_model.to(self.device, dtype=self.dtype)
+        self.image_proj_model.to('cpu', dtype=self.dtype)  # Keep on CPU initially
         
         # Load projection weights
         missing_keys = self.image_proj_model.load_state_dict(state_dict["image_proj"], strict=False)

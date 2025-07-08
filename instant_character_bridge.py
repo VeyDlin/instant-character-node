@@ -96,19 +96,17 @@ class InvokeAIInstantCharacterBridge:
         self.load_siglip = load_siglip
         self.load_dinov2 = load_dinov2
         
-        # TEMPORARY: Skip IP-Adapter loading to test memory
         # Load IP-Adapter through InvokeAI system
         # Note: Using direct URL to bypass InvokeAI's file filtering
-        # with context.models.load_remote_model(source=ip_adapter_path, loader=load_ip_adapter) as ip_path:
-        #     # Initialize IP-Adapter with downloaded file
-        #     self.ip_adapter = InstantCharacterIPAdapter(
-        #         self.transformer, 
-        #         self.text_encoder_2,
-        #         self.device,
-        #         self.dtype
-        #     )
-        #     self.ip_adapter.load_ip_adapter(str(ip_path), nb_token)
-        self.ip_adapter = None
+        with context.models.load_remote_model(source=ip_adapter_path, loader=load_ip_adapter) as ip_path:
+            # Initialize IP-Adapter with downloaded file
+            self.ip_adapter = InstantCharacterIPAdapter(
+                self.transformer, 
+                self.text_encoder_2,
+                self.device,
+                self.dtype
+            )
+            self.ip_adapter.load_ip_adapter(str(ip_path), nb_token)
             
         logger.info("InstantCharacter bridge initialized successfully")
     
@@ -231,9 +229,8 @@ class InvokeAIInstantCharacterBridge:
     ) -> Image.Image:
         """Main denoising process using InvokeAI FLUX denoising with InstantCharacter IP-Adapter"""
         
-        # TEMPORARY: Skip IP-Adapter check
-        # if self.ip_adapter is None:
-        #     raise RuntimeError("IP-Adapter not initialized")
+        if self.ip_adapter is None:
+            raise RuntimeError("IP-Adapter not initialized")
             
         generator = torch.Generator(device=self.device).manual_seed(seed)
         
@@ -268,13 +265,8 @@ class InvokeAIInstantCharacterBridge:
             img_seq_len=packed_latents.shape[1]
         )
         
-        # TEMPORARY: Skip subject image encoding to test memory
-        # subject_embeds_dict = self.encode_subject_image(subject_image)
-        subject_embeds_dict = {
-            "image_embeds_low_res_shallow": torch.zeros((1, 100, 2688), device=self.device, dtype=self.dtype),
-            "image_embeds_low_res_deep": torch.zeros((1, 577, 2688), device=self.device, dtype=self.dtype),
-            "image_embeds_high_res_deep": torch.zeros((1, 2308, 2688), device=self.device, dtype=self.dtype),
-        }
+        # Encode subject image
+        subject_embeds_dict = self.encode_subject_image(subject_image)
         
         # Create position IDs for packed latents
         img_ids = torch.zeros(
@@ -301,9 +293,18 @@ class InvokeAIInstantCharacterBridge:
         def step_callback(state: PipelineIntermediateState) -> None:
             logger.debug(f"Step {state.step}/{len(timesteps)-1}, timestep: {state.timestep}")
         
-        # TEMPORARY: Empty extensions since IP-Adapter is disabled
-        pos_ip_adapter_extensions = []
-        neg_ip_adapter_extensions = []
+        # Create InstantCharacter extensions with proper parameters
+        pos_ip_adapter_extensions, neg_ip_adapter_extensions = create_instant_character_extensions(
+            ip_adapter_layers=self.ip_adapter.ip_adapter_layers,
+            image_proj_model=self.ip_adapter.image_proj_model,
+            subject_embeds_dict=subject_embeds_dict,
+            timesteps=timestep_values,
+            weight=subject_scale,
+            begin_step_percent=0.0,
+            end_step_percent=1.0,
+            device=self.device,
+            dtype=self.dtype
+        )
         
         # Run InvokeAI FLUX denoising
         denoised_latents = denoise(

@@ -58,6 +58,8 @@ class InstantCharacterFluxExtension:
         timestep_tensor = torch.tensor([timestep / 1000.0], device=self.device, dtype=self.dtype)
         
         with torch.inference_mode():
+            # Move model to device if needed
+            self.image_proj_model = self.image_proj_model.to(self.device)
             subject_embeds = self.image_proj_model(
                 low_res_shallow=self._subject_embeds_dict['image_embeds_low_res_shallow'],
                 low_res_deep=self._subject_embeds_dict['image_embeds_low_res_deep'],
@@ -126,7 +128,7 @@ class InstantCharacterFluxExtension:
                     logger.debug(f"No IP-Adapter layer for block {block_index}, skipping")
                     return img
                     
-            ip_layer = self.ip_adapter_layers[layer_key]
+            ip_layer = self.ip_adapter_layers[layer_key].to(self.device)
             
             # Apply InstantCharacter IP-Adapter attention
             ip_conditioning = self._apply_instant_character_attention(
@@ -285,10 +287,9 @@ def create_instant_character_extensions(
         dtype=dtype
     )
     
-    # TEMPORARY: Return empty extensions to test memory without InstantCharacter
     # Return as positive IP-Adapter extension
     # InvokeAI's CustomDoubleStreamBlockProcessor expects extensions with run_ip_adapter method
-    pos_extensions = []  # Temporarily disabled
+    pos_extensions = [ic_extension]
     neg_extensions = []  # InstantCharacter doesn't use negative extensions
     
     return pos_extensions, neg_extensions
